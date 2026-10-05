@@ -1,0 +1,29 @@
+.{
+    .name = .cjson_consumer,
+    .version = "0.1.0",
+    // The value Zig 0.16.0 itself printed for this package on the first
+    // observed `zig build run` in this directory:
+    //
+    //     invalid fingerprint: 0xf6f887a8ffbf16a; if this is a new or forked
+    //     package, use this value: 0xf2ef0c9dc8ab4c41
+    //
+    // The value it replaces is not that one. This is a separate package from
+    // the library's, with its own name and its own security-relevant
+    // identity, and the field is what tells one apart from another package
+    // claiming the same name. Nothing in this package's build graph or program
+    // reads it.
+    .fingerprint = 0xf2ef0c9dc8ab4c41,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        // A relative path, not a registry or archive URL. The consumer is the
+        // proof that `dep.module("cjson")` works from outside the package that
+        // defines it; resolving that through the network would make the proof
+        // depend on a published state of the world instead.
+        .cjson = .{ .path = ".." },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}

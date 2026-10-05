@@ -1,0 +1,105 @@
+// SPDX-License-Identifier: MIT
+.{
+    // The package id and the name a dependent writes in its dependency map,
+    // and the one registered module: `dep.module("cjson")`. All three are
+    // `cjson`, and `dep.artifact("cjson")` is the same string, which is what
+    // makes Zig emit `libcjson.a` -- the name a C consumer's `-lcjson` needs,
+    // and the name upstream's own `CMAKE_PROJECT_NAME` produces
+    // (`src/CMakeLists.txt:3-6`, which sets `CJSON_LIB` from the project name).
+    .name = .cjson,
+    // Upstream's own release, read out of `src/cJSON.h:82-84`
+    // (`CJSON_VERSION_MAJOR 1`, `CJSON_VERSION_MINOR 7`,
+    // `CJSON_VERSION_PATCH 19`) and out of `src/CMakeLists.txt:5`
+    // (`VERSION 1.7.19`). This is the version of the C library this package
+    // builds, not a version of the wrapper. `build.zig` compares it against the
+    // same constant read out of the header and refuses to configure when the two
+    // disagree, so this string, the pkg-config `Version:` field and the shared
+    // object's file name cannot describe three different releases.
+    .version = "1.7.19",
+    // Deterministically derived, not invented: the first eight bytes of
+    // `sha256("cjson 1.7.19")`, big-endian. UPSTREAM.md, "Package identity",
+    // records the derivation so it can be recomputed rather than trusted.
+    .fingerprint = 0x52f300d9c8f9dfce,
+    .minimum_zig_version = "0.16.0",
+    // Nothing is fetched: the C library is this repository's own source, and the
+    // facade, tests, example, consumer and runtime table import only what is
+    // compiled here. cJSON's release is the tarball already unpacked into `src/`.
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        // The cross-test harness profile for this package. It is a file in the
+        // package because it is how this package declares what its
+        // cross-platform gate is: `cross-test` discovers it by name from the
+        // package root, and it is settings only -- the standard `zig build test`
+        // step over the full published platform matrix, no target subset and no
+        // host path. Nothing in build.zig reads it.
+        "cross-test.profile.sh",
+        // zig/root.zig is the typed facade and zig/translate.h the aggregate
+        // translation header. Both travel because a dependent reaches them
+        // through `dep.module("cjson")`.
+        "zig",
+        // Upstream's cJSON, unmodified: the complete 1.7.19 release tree --
+        // the one library source, both public headers, the companion
+        // `cJSON_Utils.c`/`.h` pair that upstream builds as a separate target,
+        // the whole upstream test suite, the fuzzing harnesses, the library
+        // configuration document, and upstream's own CMakeLists, Makefile,
+        // README, CHANGELOG, CONTRIBUTORS, SECURITY policy and AppVeyor
+        // configuration. The whole directory travels rather than a hand-picked
+        // file list so that the tree a dependent receives is upstream's tree:
+        // nothing here is edited, re-entered or regenerated, and a build that
+        // needed a file not in this closure would have to edit upstream to get
+        // it. The licence is inside it: `src/LICENSE` is cJSON's own MIT text.
+        "src",
+        // The fixture corpus the behavioural tests read at run time: the RFC
+        // 8259 section 13 examples, the fork-authored value and malformed
+        // documents, and one large real-world document. It travels because
+        // `zig build test` reads it by a path relative to the build root, and a
+        // dependent that runs the tests needs it beside them.
+        "testdata",
+        "tests.zig",
+        "smoke.zig",
+        // The separate consumer package: proof that the published module
+        // resolves from a package that did not write it, through a relative
+        // path rather than a fetch.
+        "consumer/build.zig",
+        "consumer/build.zig.zon",
+        "consumer/src/main.zig",
+        // Upstream's README preserved byte for byte as the record it is, and
+        // the licence and provenance records this fork added around it.
+        "README.upstream.md",
+        "UPSTREAM.md",
+        "UPSTREAM.sha256",
+        "README.md",
+        "README.zig.md",
+        "NOTICE.md",
+        "CHANGELOG.md",
+        "FORK-NOTES.md",
+        "FORK-LICENSE.md",
+        // The provenance script that checks the recorded digests and the exact
+        // upstream file set.
+        "tools",
+        // The runtime loader core the API role owns, and this library's
+        // descriptor beside it. It is a dependency of the published module
+        // under `-Druntime`, so a dependent that uses that route must receive
+        // it; `runtime/graph.zig` is the one place `createModule` substitutes
+        // for `translate.createModule()`.
+        "runtime",
+        // Standalone Nix packaging. `package.nix` is the one source-only
+        // derivation and builds the `.static` and `.dynamic` variants of this
+        // same tree; `flake.nix` exposes them; `devenv.nix`, `devenv.yaml` and
+        // `.envrc` provide the canonical development shell. The lock files
+        // belong to the driver and are absent from this list until they exist:
+        // naming a path that is not there would make `zig fetch` hash a missing
+        // entry.
+        "package.nix",
+        "flake.nix",
+        "devenv.nix",
+        "devenv.yaml",
+        ".envrc",
+        // .zig-cache/, zig-out/, zig-pkg/, consumer/.zig-cache/ and the Nix
+        // and devenv working-tree artefacts are deliberately absent: build
+        // outputs, a fetched package tree, a `result` symlink and shell state
+        // are not part of a package. See .gitignore.
+    },
+}
