@@ -1,75 +1,19 @@
-//! Behavioural tests for the cJSON facade.
-//!
-//! ## What the expectations are
-//!
-//! Four kinds, and they are kept apart on purpose:
-//!
-//!   * **RFC 8259.** The `testdata/rfc8259/` documents are the examples in
-//!     section 13 of RFC 8259 (Bray, *The JavaScript Object Notation (JSON)
-//!     Data Interchange Format*, December 2017), transcribed verbatim. The
-//!     expected values in the first tests are the ones the RFC itself prints, so
-//!     agreeing with them is agreeing with the specification rather than with
-//!     this binding. The transcription, the six-space indent the RFC's text
-//!     formatting adds, and the digests are in UPSTREAM.md.
-//!   * **Upstream's own recorded output.** The printed-number table below is
-//!     `src/tests/print_number.c:65-101`, the reference implementation's own
-//!     expectations for `print_number`. That is interoperability with a
-//!     reference implementation rather than a round trip through this build.
-//!   * **The documented behaviour of this configuration.** The rejected inputs
-//!     carry the byte offset upstream reports for them, each derived from the
-//!     line references given, and the nesting test uses the limit the header
-//!     states. Those are behavioural boundaries, not version pins.
-//!   * **Independent arithmetic.** Where a number is involved the expected
-//!     `f64` is either the RFC's own digits or the result of Zig's own
-//!     `std.fmt.parseFloat`, which is a different implementation from cJSON's
-//!     `strtod` (`src/cJSON.c:378`). Nothing here asserts "the parse agreed
-//!     with the print".
-//!
-//! The two fixtures in `testdata/values/` that RFC 8259 forbids and this parser
-//! accepts -- `leading-zero.json` and `unescaped-control-character.json` -- are
-//! tested for exactly what upstream's source says it does with them, with the
-//! deviation named. They are not tested as if they were accepted by
-//! specification.
-//!
-//! ## What is deliberately absent
-//!
-//! No test pins `cJSON_Version`, a constant, a default, or the presence of a
-//! declaration; those belong to the provenance and licence gates. No test
-//! compares a forwarding accessor with a raw member. Every public method on the
-//! facade is called from this file, which is what makes building the test binary
-//! a real check of the facade rather than of an unreferenced C archive.
-//!
-//! ## The provider, in a runtime-loading build
-//!
-//! A `-Druntime` build links no archive, so every test below reaches the library
-//! through the loader and nothing works until a provider has been named. It is
-//! named by `CJSON_PROVIDER`, an absolute path to a shared object exporting the
-//! `cJSON_*` API. Nothing is loaded by default and no other file is tried: a
-//! build that was not told which file to load stops with the variable's name
-//! rather than reporting a failure that says nothing about the reason. In a
-//! linked build the variable is never read.
+//! Behavioral tests for the cJSON facade.
+//! Covers RFC examples, upstream output, malformed input, ownership, and fixtures.
 
 const std = @import("std");
 const cjson = @import("cjson");
 
-/// Where the build put the fixture corpus. Relative to the build root, which is
-/// the working directory a `Step.Run` with no explicit cwd inherits.
+/// Directory containing the fixture corpus.
 const paths = @import("cjson_paths");
 
-/// A shared object exporting the `cJSON_*` API, named by the environment in a
-/// runtime-loading build.
+/// Environment variable naming the provider in runtime-loading builds.
 const provider_variable = "CJSON_PROVIDER";
 
-/// The largest fixture in `testdata/`. It is `testdata/large/twitter.json`,
-/// 631,515 bytes; the limit is a bound on this test's own read, chosen above it
-/// so a truncated fixture is a failure here rather than a silent shorter parse.
+/// Read bound above the largest fixture size.
 const fixture_limit: std.Io.Limit = .limited(1 << 20);
 
-/// Make the native library usable, once, before a test calls the facade.
-///
-/// Safe to call from every test: the loader's contract makes the same request
-/// idempotent and keeps the handle to the end of the process, so `loadedSource`
-/// is what makes the second and later calls free of work.
+/// Load the runtime provider once before tests call the facade.
 fn nativeReady() void {
     if (comptime !cjson.runtime_loaded) return;
     if (cjson.loadedSource() != null) return;
@@ -99,17 +43,11 @@ fn missingProvider() noreturn {
     );
 }
 
-/// Read one fixture.
-///
-/// The fixtures are counted buffers, not NUL-terminated strings, so they are
-/// parsed with `parseBytes` throughout. That is the entry point a caller with a
-/// mapped file or a network buffer has to use anyway, and it is the one whose
-/// length argument the tests then depend on.
+/// Read one counted fixture from the build-root-relative corpus.
 fn readFixture(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     return std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, allocator, fixture_limit);
 }
 
-/// Parse a fixture, with a message naming the file if it does not parse.
 fn parseFixture(bytes: []const u8) !cjson.Document {
     return cjson.parseBytes(bytes, .{}) catch {
         std.debug.print("tests.zig: fixture did not parse: {s}\n", .{bytes[0..@min(bytes.len, 80)]});
@@ -117,21 +55,17 @@ fn parseFixture(bytes: []const u8) !cjson.Document {
     };
 }
 
-/// The value of a member that must be a number, with the two failures named.
+/// Return member `name` as `f64`, or `MissingMember`/`NotANumber`.
 fn number(doc: cjson.Borrowed, name: [:0]const u8) !f64 {
     const member = doc.field(name, .case_sensitive) orelse return error.MissingMember;
     return member.numberValue() orelse return error.NotANumber;
 }
 
-/// The value of a member that must be a string, with the two failures named.
+/// Return member `name` as text, or `MissingMember`/`NotAString`.
 fn string(doc: cjson.Borrowed, name: [:0]const u8) ![]const u8 {
     const member = doc.field(name, .case_sensitive) orelse return error.MissingMember;
     return member.stringValue() orelse return error.NotAString;
 }
-
-// ---------------------------------------------------------------------------
-// RFC 8259 section 13
-// ---------------------------------------------------------------------------
 
 test "RFC 8259 section 13: the example object keeps every member and value the RFC prints" {
     nativeReady();
@@ -142,9 +76,6 @@ test "RFC 8259 section 13: the example object keeps every member and value the R
 
     const root = doc.rootValue();
     try std.testing.expectEqual(cjson.Type.object, root.kind());
-    // The RFC's example object has exactly one member at the top level,
-    // `Image`, and every value the RFC prints is inside it
-    // (`testdata/rfc8259/13-object.json:2-13`).
     try std.testing.expectEqual(@as(usize, 1), root.count());
 
     const image = root.field("Image", .case_sensitive) orelse return error.MissingMember;
@@ -157,7 +88,6 @@ test "RFC 8259 section 13: the example object keeps every member and value the R
         return error.MissingMember).boolValue() orelse return error.NotABool);
     try std.testing.expectEqual(true, image.field("Animated", .case_sensitive).?.isNull() == false);
 
-    // The one member name the RFC spells with a space before its colon.
     try std.testing.expectEqualStrings("Animated", image.at(4).?.memberName() orelse
         return error.MissingName);
 
@@ -169,7 +99,7 @@ test "RFC 8259 section 13: the example object keeps every member and value the R
     try std.testing.expectEqual(@as(f64, 125), try number(thumbnail, "Height"));
     try std.testing.expectEqual(@as(f64, 100), try number(thumbnail, "Width"));
 
-    // Four integers, in order. The RFC writes them as `[116, 943, 234, 38793]`.
+    // The RFC prints these four integer IDs in this order.
     const ids = image.field("IDs", .case_sensitive) orelse return error.MissingMember;
     try std.testing.expectEqual(cjson.Type.array, ids.kind());
     try std.testing.expectEqual(@as(usize, 4), ids.count());
@@ -192,9 +122,7 @@ test "RFC 8259 section 13: the two records in the example array keep their coord
     try std.testing.expectEqual(cjson.Type.array, root.kind());
     try std.testing.expectEqual(@as(usize, 2), root.count());
 
-    // The RFC prints `-122.026020` for the second longitude. A `double` has no
-    // trailing zero, and the value is the one the RFC's digits denote: this is
-    // the nearest double to -122.02602 and nothing else.
+    // The RFC's trailing zero is not represented in the `f64` value.
     const san_francisco = root.at(0) orelse return error.MissingElement;
     try std.testing.expectEqualStrings("SAN FRANCISCO", try string(san_francisco, "City"));
     try std.testing.expectEqualStrings("zip", try string(san_francisco, "precision"));
@@ -233,15 +161,10 @@ test "RFC 8259 section 13: the three one-value documents are one value each" {
                 return error.NotAString),
             else => return error.WrongFixture,
         }
-        // A scalar has no children, and upstream counts them by walking the
-        // chain rather than by looking at the type (`src/cJSON.c:1884-1905`).
+        // cJSON reports zero children for scalar values.
         try std.testing.expectEqual(@as(usize, 0), root.count());
     }
 }
-
-// ---------------------------------------------------------------------------
-// Numbers
-// ---------------------------------------------------------------------------
 
 test "every number in the grammar fixture parses to the double its own text denotes" {
     nativeReady();
@@ -253,19 +176,14 @@ test "every number in the grammar fixture parses to the double its own text deno
     const root = doc.rootValue();
     try std.testing.expectEqual(@as(usize, 17), root.count());
 
-    // Walk the fixture's own text and parse it again with Zig's parser, which
-    // shares no code with cJSON's `strtod` (`src/cJSON.c:378`). The comparison
-    // is on bits: an equal-looking decimal can round to two different doubles
-    // and this is where that would show up.
+    // Compare each parsed number with Zig's independent decimal parser.
     var text = bytes;
     var index: usize = 0;
     for (0..root.count()) |position| {
         const element = root.at(position) orelse return error.MissingElement;
         const value = element.numberValue() orelse return error.NotANumber;
 
-        // The fixture is one number per line, between `[`, a comma or `]` and
-        // the newline. Reading the token out of the fixture rather than out of a
-        // second table is what keeps the two halves independent.
+        // Read tokens from the fixture to keep expected values independent.
         text = text[std.mem.findAny(u8, text, "-0123456789").? ..];
         var end = text.len;
         for (text, 0..) |byte, at| {
@@ -286,8 +204,7 @@ test "every number in the grammar fixture parses to the double its own text deno
     }
     try std.testing.expectEqual(root.count(), index);
 
-    // `-0` is in that fixture because its sign is the only thing that
-    // distinguishes it from `0`, and the sign is in the bit pattern.
+    // The sign bit distinguishes parsed `-0` from `0`.
     const negative_zero = root.at(0) orelse return error.MissingElement;
     try std.testing.expectEqual(@as(u64, 0x8000000000000000), @as(u64, @bitCast(
         negative_zero.numberValue() orelse return error.NotANumber,
@@ -301,14 +218,7 @@ test "every number in the grammar fixture parses to the double its own text deno
 test "printed numbers are the strings upstream's own test suite records" {
     nativeReady();
 
-    // This table is `src/tests/print_number.c:65-101`, copied out of the
-    // reference implementation's own expectations. It is not this build
-    // comparing itself with itself: those strings were recorded by upstream, for
-    // its own `print_number`, and they are what the formatter has to produce.
-    //
-    // Each row is reached by parsing the number as a whole document and
-    // printing it with `cJSON_PrintUnformatted`, which routes a bare number
-    // through the same `print_number` (`src/cJSON.c:1456-1457`).
+    // Expected output comes from upstream's print_number table (src/tests/print_number.c:65-101).
     const cases = [_]struct { input: [:0]const u8, printed: [:0]const u8 }{
         .{ .input = "0", .printed = "0" },
         .{ .input = "-1", .printed = "-1" },
@@ -342,17 +252,7 @@ test "printed numbers are the strings upstream's own test suite records" {
         try std.testing.expectEqualStrings(case.printed, printed);
     }
 
-    // Two rows this build has to answer for itself, because they are what the
-    // `test1`/`test7` fixtures contain and neither is in upstream's table:
-    // the exact form of the largest double, and the fact that `-0` prints as
-    // `0`. The first is `print_number`'s 15-digit branch
-    // (`src/cJSON.c:618-621`): `%1.15g` of the largest double is
-    // `1.79769313486232e+308`, re-reading that does not give the original
-    // double back, but `compare_double`'s tolerance (`src/cJSON.c:584-588`)
-    // accepts it, so the 17-digit branch at `src/cJSON.c:623-625` is never
-    // taken. The second one is `print_number`'s integer branch
-    // (`src/cJSON.c:611-614`) applied to a value whose `valueint` is 0, and
-    // `-0.0 == 0.0` is true, so the sign does not survive the print.
+    // These cases pin largest-f64 formatting and the loss of negative zero.
     {
         var doc = try cjson.parse("1.7976931348623157e308", .{});
         defer doc.deinit();
@@ -369,10 +269,6 @@ test "printed numbers are the strings upstream's own test suite records" {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Strings
-// ---------------------------------------------------------------------------
-
 test "every escape in the string fixture decodes to the bytes RFC 8259 section 7 names" {
     nativeReady();
     const bytes = try readFixture(std.testing.allocator, "testdata/values/string-escapes.json");
@@ -383,11 +279,7 @@ test "every escape in the string fixture decodes to the bytes RFC 8259 section 7
     const root = doc.rootValue();
     try std.testing.expectEqual(@as(usize, 15), root.count());
 
-    // The expectations are the decoded bytes of the escape, written out from the
-    // grammar in RFC 8259 section 7 and from the code point each escape names.
-    // `\ud834\udd1e` is the G clef, the example the RFC gives for a character
-    // outside the Basic Multilingual Plane (section 7), and its UTF-8 form is
-    // four bytes; `\u4e2d\u6587` is two three-byte forms.
+    // Expected bytes follow RFC 8259 section 7; the surrogate pair encodes a four-byte UTF-8 character.
     const cases = [_]struct { expected: []const u8 }{
         .{ .expected = "\"" },
         .{ .expected = "\\" },
@@ -415,13 +307,7 @@ test "every escape in the string fixture decodes to the bytes RFC 8259 section 7
 
 test "a raw control character is accepted and comes back escaped" {
     nativeReady();
-    // RFC 8259 section 7 requires a control character in a string to be
-    // escaped, so this document is not conforming. This parser accepts it:
-    // `parse_string` copies every byte that is not a backslash, with no check
-    // on its value (`src/cJSON.c:867-873`). The deviation is the point of the
-    // test, and it is pinned in both directions -- accepted here, and re-emitted
-    // as `\u0001`, because `print_string_ptr` escapes every byte below 32 with
-    // `sprintf("u%04x", byte)` (`src/cJSON.c:991-998`, `:1058`).
+    // cJSON accepts unescaped control bytes and escapes them when printing.
     const bytes = try readFixture(std.testing.allocator, "testdata/values/unescaped-control-character.json");
     defer std.testing.allocator.free(bytes);
     var doc = try parseFixture(bytes);
@@ -441,10 +327,7 @@ test "a raw control character is accepted and comes back escaped" {
 
 test "a leading zero is accepted and is not reported as an error" {
     nativeReady();
-    // RFC 8259 section 6 forbids leading zeros; `parse_value` admits `-` or a
-    // digit (`src/cJSON.c:1399`), `parse_number` scans the whole
-    // `0-9 + - e E .` run (`src/cJSON.c:325-354`), and `strtod` consumes `01` as
-    // one decimal number (`src/cJSON.c:378`). The value is 1.
+    // cJSON accepts the non-RFC leading zero as the number 1.
     const bytes = try readFixture(std.testing.allocator, "testdata/values/leading-zero.json");
     defer std.testing.allocator.free(bytes);
     var doc = try parseFixture(bytes);
@@ -452,10 +335,6 @@ test "a leading zero is accepted and is not reported as an error" {
 
     try std.testing.expectEqual(@as(f64, 1), try number(doc.rootValue(), "a"));
 }
-
-// ---------------------------------------------------------------------------
-// Object shape
-// ---------------------------------------------------------------------------
 
 test "a repeated member name resolves to the first occurrence and all three survive" {
     nativeReady();
@@ -465,9 +344,7 @@ test "a repeated member name resolves to the first occurrence and all three surv
     defer doc.deinit();
 
     const root = doc.rootValue();
-    // Three members, not two: `get_object_item` walks the chain and stops at
-    // the first match (`src/cJSON.c:1945-1965`), but nothing deduplicates on
-    // the way in, so every name that was parsed is still in the document.
+    // Lookup returns the first match; parsed duplicate members remain in the tree.
     try std.testing.expectEqual(@as(usize, 3), root.count());
     try std.testing.expectEqual(@as(f64, 1), try number(root, "a"));
     try std.testing.expectEqual(@as(f64, 2), try number(root, "b"));
@@ -476,7 +353,6 @@ test "a repeated member name resolves to the first occurrence and all three surv
     try std.testing.expectEqualStrings("a", third.memberName() orelse return error.MissingName);
     try std.testing.expectEqual(@as(f64, 3), third.numberValue() orelse return error.NotANumber);
 
-    // Both names are reachable by index; only the first is reachable by name.
     try std.testing.expectEqual(@as(f64, 1), root.at(0).?.numberValue() orelse return error.NotANumber);
     try std.testing.expectEqual(@as(f64, 2), root.at(1).?.numberValue() orelse return error.NotANumber);
 }
@@ -492,48 +368,14 @@ test "member lookup folds case by default and does not when asked" {
     try std.testing.expectEqual(@as(?cjson.Borrowed, null), root.field("key", .case_sensitive));
     const exact = root.field("Key", .case_sensitive) orelse return error.MissingMember;
     try std.testing.expectEqual(@as(f64, 1), exact.numberValue() orelse return error.NotANumber);
-    // `cJSON_HasObjectItem` is the folded predicate (`src/cJSON.h:180`), and it
-    // is what this answers; a case-sensitive caller has `field` above.
     try std.testing.expect(root.hasField("KEY"));
     try std.testing.expect(!root.hasField("other"));
 }
 
-// ---------------------------------------------------------------------------
-// Malformed input
-// ---------------------------------------------------------------------------
-
 test "each document no conforming parser accepts is refused at the offset upstream reports" {
     nativeReady();
 
-    // Every offset below is derived from the parse path, not measured:
-    //
-    //  * `{"a":1,}` -- the second loop iteration of `parse_object`
-    //    (`src/cJSON.c:1685-1740`) calls `parse_string` on the `}` at index 7,
-    //    which fails its first check; `parse_string`'s failure path puts the
-    //    offset one past that character (`src/cJSON.c:940-943`), which is the
-    //    end of the buffer, and `cJSON_ParseWithLengthOpts` clamps a position
-    //    that ran off the end to the last byte (`src/cJSON.c:1201-1208`). So 7.
-    //  * `{'a':'b'}` -- the value is an object, so `parse_value` takes its `{`
-    //    branch (`src/cJSON.c:1409-1412`) and `parse_object` asks
-    //    `parse_string` for the name at index 1 (`src/cJSON.c:1714-1719`).
-    //    `parse_string` fails its first check on the `'`
-    //    (`src/cJSON.c:827-830`), and its failure path records
-    //    `input_pointer`, which is one past the opening quote
-    //    (`src/cJSON.c:821`, `:940-943`): 2.
-    //  * `{a:1}` -- `parse_object` calls `parse_string` at index 1, which fails
-    //    immediately and reports one past it: 2.
-    //  * `{"a":NaN}` and `{"a":+1}` -- the name and the colon are consumed and
-    //    `parse_value` matches nothing for `N` or `+`, which is index 5.
-    //  * `{"a" 1}` -- after the name, whitespace is skipped to index 5 and the
-    //    colon check fails (`src/cJSON.c:1726-1729`): 5.
-    //  * `{"a":"b}` -- the value string scans for a closing quote from one past
-    //    its own opening one and runs off the end without finding one
-    //    (`src/cJSON.c:836-854`); the failure path records `input_pointer`,
-    //    which is one past that opening quote (`src/cJSON.c:821`, `:940-943`),
-    //    so 6. The `}` at index 7 is never reached, and nothing is clamped
-    //    because 6 < 8.
-    //  * an empty buffer -- rejected before parsing (`src/cJSON.c:1151-1154`)
-    //    with position 0.
+    // Offsets follow upstream parser paths, not measurements (src/cJSON.c:827-1215).
     const cases = [_]struct { path: []const u8, offset: usize }{
         .{ .path = "testdata/malformed/01-trailing-comma-object.json", .offset = 7 },
         .{ .path = "testdata/malformed/02-single-quoted-string.json", .offset = 2 },
@@ -573,17 +415,12 @@ test "a successful parse leaves no error position behind" {
     var doc = try parseFixture(bytes);
     defer doc.deinit();
 
-    // `cJSON_ParseWithLengthOpts` clears both halves of the global error record
-    // before it parses anything (`src/cJSON.c:1147-1150`), so after a success the
-    // answer is null rather than a stale position from an earlier failure.
+    // A successful parse clears cJSON's process-wide error pointer (src/cJSON.c:1147-1150).
     try std.testing.expectEqual(@as(?usize, null), cjson.parseErrorOffset(bytes));
 }
 
 test "a counted buffer cannot be asked for a strict parse it cannot honour" {
     nativeReady();
-    // `cJSON_ParseWithLength` forwards `require_null_terminated` as 0
-    // (`src/cJSON.c:1229`), so the request is refused rather than dropped: a
-    // caller who asked for strictness must not silently get laxness.
     try std.testing.expectError(
         cjson.ParseError.NullTerminatedInputRequired,
         cjson.parseBytes("{\"a\":1}", .{ .require_null_terminated = true }),
@@ -595,8 +432,6 @@ test "trailing content is accepted by a lax parse and refused by a strict one" {
     const text: [:0]const u8 = "{\"a\":1} trailing";
 
     {
-        // Without the flag, upstream stops at the end of the first value and
-        // never looks at what follows (`src/cJSON.c:1174-1181`).
         var doc = try cjson.parse(text, .{});
         defer doc.deinit();
         try std.testing.expectEqual(@as(usize, 1), doc.rootValue().count());
@@ -611,16 +446,10 @@ test "trailing content is accepted by a lax parse and refused by a strict one" {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Depth and scale
-// ---------------------------------------------------------------------------
-
 test "nesting is accepted below the header's limit and refused above it" {
     nativeReady();
 
-    // `CJSON_NESTING_LIMIT` is 1000 (`src/cJSON.h:136-138`), checked before each
-    // level of array or object (`src/cJSON.c:1497-1501`, `:1657-1661`), so a
-    // document nested deeper than that is refused rather than risking the stack.
+    // cJSON rejects nesting beyond CJSON_NESTING_LIMIT (src/cJSON.h:136-138).
     for ([_]usize{ 32, 64 }) |depth| {
         const path = try std.fmt.allocPrint(
             std.testing.allocator,
@@ -634,10 +463,6 @@ test "nesting is accepted below the header's limit and refused above it" {
         var doc = try parseFixture(bytes);
         defer doc.deinit();
 
-        // Walk down exactly as deep as the document is nested -- the fixture is
-        // `depth` objects named `a` around one object holding `leaf` -- and
-        // then one step further, onto the member itself, which is the value
-        // that carries the name and the number asserted below.
         var node = doc.rootValue();
         for (0..depth) |_| {
             node = node.field("a", .case_sensitive) orelse return error.MissingMember;
@@ -673,12 +498,7 @@ test "a 631 KB document parses, and the counts and fields read out of it are the
     try std.testing.expectEqual(@as(f64, 100), try number(metadata, "count"));
     try std.testing.expectEqual(@as(f64, 0), try number(metadata, "since_id"));
 
-    // The file carries the same identifier twice, once as a number and once as a
-    // string, and a `double` cannot hold all of it. `max_id` is written as
-    // 505874924095815700, which is what 505874924095815681 rounds to in binary64
-    // -- two units of the last digit away -- while `max_id_str` is the exact
-    // digits. A parser that silently rounded both the same way, or that lost the
-    // string, would fail one half of this.
+    // Binary64 rounds numeric `max_id`; `max_id_str` preserves its exact digits.
     try std.testing.expectEqual(@as(f64, 505874924095815700.0), try number(metadata, "max_id"));
     try std.testing.expectEqualStrings("505874924095815681", try string(metadata, "max_id_str"));
 
@@ -693,16 +513,10 @@ test "a 631 KB document parses, and the counts and fields read out of it are the
     try std.testing.expectEqualStrings("ayuu0123", try string(first.field("user", .case_sensitive) orelse
         return error.MissingMember, "screen_name"));
 
-    // Multi-byte UTF-8 survives the parse as bytes, and the fixture's first
-    // record begins with an ASCII handle followed by Japanese text.
     const text = try string(first, "text");
     try std.testing.expect(std.mem.startsWith(u8, text, "@aym0566x "));
     try std.testing.expect(std.mem.find(u8, text, "\xe5\x90\x8d") != null);
 }
-
-// ---------------------------------------------------------------------------
-// Ownership and mutation
-// ---------------------------------------------------------------------------
 
 test "detaching a member hands it to the caller and shortens the document" {
     nativeReady();
@@ -712,21 +526,16 @@ test "detaching a member hands it to the caller and shortens the document" {
     var root = doc.rootValue();
     try std.testing.expectEqual(@as(usize, 2), root.count());
 
-    // The ownership transition: what comes back has to be released by the
-    // caller, because `cJSON_DetachItemFromObject` removes the node from the
-    // chain and returns it without freeing it (`src/cJSON.h:239-245`).
     const detached = root.detachField("a", .case_sensitive) orelse return error.MissingMember;
     try std.testing.expectEqual(@as(usize, 1), root.count());
     try std.testing.expectEqual(@as(f64, 1), detached.borrow().numberValue() orelse
         return error.NotANumber);
     try std.testing.expectEqual(@as(?cjson.Borrowed, null), root.field("a", .case_sensitive));
 
-    // The document no longer knows about it, so it can print without it.
     const printed = try cjson.print(root, .compact);
     defer cjson.freePrinted(printed);
     try std.testing.expectEqualStrings("{\"b\":2}", printed);
 
-    // And releasing it here is the only release it needs.
     detached.deinit();
 }
 
@@ -773,10 +582,7 @@ test "an array built through the facade prints in the order it was appended" {
     defer cjson.freePrinted(printed);
     try std.testing.expectEqualStrings("[1,2,\"three\",true,null]", printed);
 
-    // `print_array` emits no newlines and no indentation at all
-    // (`src/cJSON.c:1590-1649`): the only difference between the two formatters
-    // is a space after each comma. Indentation belongs to `print_object`
-    // (`src/cJSON.c:1791-1812`), and it is one tab per level, not spaces.
+    // cJSON formats arrays with comma spaces but no indentation (src/cJSON.c:1590-1649).
     const formatted = try cjson.print(array.borrow(), .formatted);
     defer cjson.freePrinted(formatted);
     try std.testing.expectEqualStrings("[1, 2, \"three\", true, null]", formatted);
@@ -806,15 +612,9 @@ test "printing into a buffer too small reports it rather than truncating silentl
 
     var roomy: [64]u8 = undefined;
     try std.testing.expect(cjson.printInto(doc.rootValue(), &roomy, .compact));
-    // `cJSON_PrintPreallocated` NUL-terminates what it wrote
-    // (`src/cJSON.c:1360-1361`), so the bytes before the NUL are the document.
     const written = std.mem.findScalar(u8, &roomy, 0).?;
     try std.testing.expectEqualStrings("{\"a\":[1,2,3]}", roomy[0..written]);
 }
-
-// ---------------------------------------------------------------------------
-// Comparison
-// ---------------------------------------------------------------------------
 
 test "comparison uses the documented numeric tolerance, not bit equality" {
     nativeReady();
@@ -823,38 +623,23 @@ test "comparison uses the documented numeric tolerance, not bit equality" {
     defer tenth.deinit();
     var fifth = try cjson.parse("0.2", .{});
     defer fifth.deinit();
-    // The document the sum belongs in. `0.1 + 0.2` is not `0.3` in binary64,
-    // and it is not `0.1` either, which is what makes the comparison below a
-    // comparison of a sum against `0.3` at all.
+    // Parsed operands test runtime binary64 arithmetic.
     var sum = try cjson.parse("0.30000000000000004", .{});
     defer sum.deinit();
     var third = try cjson.parse("0.3", .{});
     defer third.deinit();
 
-    // 0.1 + 0.2 is not 0.3 as a double: their bit patterns differ
-    // (0x3FD3333333333334 against 0x3FD3333333333333). The two operands are
-    // read out of parsed documents rather than written as comptime literals,
-    // because Zig evaluates a comptime `0.1 + 0.2` in wider arithmetic where it
-    // rounds to the same binary64 as `0.3`: the difference asserted here is a
-    // fact about the arithmetic a running program performs.
+    // Parsing avoids comptime arithmetic, which can round differently.
     const sum_bits = @as(u64, @bitCast(
         tenth.rootValue().numberValue().? + fifth.rootValue().numberValue().?,
     ));
     const third_bits = @as(u64, @bitCast(third.rootValue().numberValue().?));
     try std.testing.expect(sum_bits != third_bits);
-    // `compare_double` accepts them anyway, because the difference
-    // (5.551115123125783e-17) is within `DBL_EPSILON` times the larger
-    // magnitude (6.661338147750939e-17) (`src/cJSON.c:584-588`).
     try std.testing.expect(sum.rootValue().equal(third.rootValue(), .case_sensitive));
     try std.testing.expect(third.rootValue().equal(sum.rootValue(), .case_sensitive));
 
-    // Two numbers that are not close are still not equal.
     try std.testing.expect(!tenth.rootValue().equal(fifth.rootValue(), .case_sensitive));
 
-    // And an object comparison is by member name, not by position: the fixture's
-    // keys are in a different order in each document and the answer is still
-    // equal, because `cJSON_Compare` looks each member up by name in both
-    // directions (`src/cJSON.c:3139-3174`).
     var left = try cjson.parse("{\"a\":1,\"b\":2}", .{});
     defer left.deinit();
     var right = try cjson.parse("{\"b\":2,\"a\":1}", .{});
@@ -866,10 +651,6 @@ test "comparison uses the documented numeric tolerance, not bit equality" {
     try std.testing.expect(!left.rootValue().equal(subset.rootValue(), .case_sensitive));
 }
 
-// ---------------------------------------------------------------------------
-// Duplication
-// ---------------------------------------------------------------------------
-
 test "a recursive duplicate is an independent tree" {
     nativeReady();
     var doc = try cjson.parse("{\"a\":{\"b\":[1,2]}}", .{});
@@ -878,14 +659,10 @@ test "a recursive duplicate is an independent tree" {
     const copy = try cjson.duplicate(doc.rootValue(), true);
     defer copy.deinit();
 
-    // A recursive duplicate starts out equal to its original and shares no node
-    // with it (`src/cJSON.c:2769-2790`).
+    // A recursive duplicate copies the full tree (src/cJSON.c:2769-2790).
     try std.testing.expect(doc.rootValue().equal(copy.borrow(), .case_sensitive));
     try std.testing.expect(copy.borrow().raw() != doc.rootValue().raw());
 
-    // The copy is a separate tree, so changing one does not change the other.
-    // The change goes through the owning type's own methods, which is what
-    // makes this a statement about the copy rather than about the original.
     const copied_a = copy.borrow().field("a", .case_sensitive) orelse return error.MissingMember;
     try copied_a.replaceField("b", try cjson.createNumber(99), .case_sensitive);
 
@@ -893,7 +670,6 @@ test "a recursive duplicate is an independent tree" {
     try std.testing.expectEqual(cjson.Type.number, copied_b.kind());
     try std.testing.expectEqual(@as(f64, 99), copied_b.numberValue() orelse return error.NotANumber);
 
-    // The original still holds the tree it was parsed from.
     const original_a = doc.rootValue().field("a", .case_sensitive) orelse return error.MissingMember;
     const original_b = original_a.field("b", .case_sensitive) orelse return error.MissingMember;
     try std.testing.expectEqual(@as(usize, 2), original_b.count());

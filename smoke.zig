@@ -1,20 +1,10 @@
-//! The smoke example: one end-to-end pass over the facade that checks its own
-//! answers and prints them.
-//!
-//! It reads no fixture. Every value here is written into this file, so the
-//! example is the smallest complete thing a caller can copy: name a provider if
-//! the build is runtime-loaded, parse, read, build, print, release.
-//!
-//! `zig build smoke` runs it. `zig build` only compiles it, because installing is
-//! `zig build`'s job and a default step that executes a program is a side effect
-//! nobody asked for.
+//! End-to-end example for the cJSON facade.
+//! Parses, reads, builds, prints, and releases documents.
 
 const std = @import("std");
 const cjson = @import("cjson");
 
-/// A shared object exporting the `cJSON_*` API, named by the environment in a
-/// runtime-loading build. Nothing is loaded by default and no other file is
-/// tried.
+/// Environment variable naming the provider in runtime-loading builds.
 const provider_variable = "CJSON_PROVIDER";
 
 fn nativeReady(init: std.process.Init) void {
@@ -43,9 +33,7 @@ fn nativeReady(init: std.process.Init) void {
 pub fn main(init: std.process.Init) !u8 {
     nativeReady(init);
 
-    // A document with one string, one array and one boolean. The quotes are
-    // escaped in the Zig source, not in the JSON: what is parsed here is
-    // `{"name":"cjson","tags":["parse","print"],"ready":true}`.
+    // This document contains one string, one array, and one boolean.
     const source: [:0]const u8 = "{\"name\":\"cjson\",\"tags\":[\"parse\",\"print\"],\"ready\":true}";
 
     var doc = try cjson.parse(source, .{});
@@ -54,8 +42,6 @@ pub fn main(init: std.process.Init) !u8 {
 
     std.debug.print("cjson {s}: parsed {d} members\n", .{ cjson.version(), root.count() });
 
-    // Read three values and check them against what the text says. A facade that
-    // handed back the wrong member, or the wrong value for it, stops here.
     const name = root.field("name", .case_sensitive) orelse return error.MissingMember;
     if (!std.mem.eql(u8, name.stringValue() orelse return error.NotAString, "cjson")) {
         return error.WrongName;
@@ -70,9 +56,7 @@ pub fn main(init: std.process.Init) !u8 {
     const ready = root.field("ready", .case_sensitive) orelse return error.MissingMember;
     if ((ready.boolValue() orelse return error.NotABool) != true) return error.WrongReady;
 
-    // Build a value of our own, hand its members to a new document, and print
-    // both. The printed form is checked, not merely produced: a formatter that
-    // changed its separators would otherwise print something and pass.
+    // Build a document and check its compact output.
     const built = try cjson.createObject();
     defer built.deinit();
     try built.borrow().put("answer", try cjson.createNumber(42));
@@ -92,14 +76,10 @@ pub fn main(init: std.process.Init) !u8 {
     std.debug.print("round trip: {s}\n", .{compact});
     std.debug.print("built:      {s}\n", .{built_compact});
 
-    // An error path, so the example shows what a refusal looks like rather than
-    // only the happy route. `{"a":}` is refused with the position upstream
-    // reports (`src/cJSON.c:94-97`, `:1201-1208`).
+    // Malformed input demonstrates a parse error and its byte offset.
     const bad: [:0]const u8 = "{\"a\":}";
     if (cjson.parse(bad, .{})) |parsed| {
-        // The capture of an error union is a `const` binding and
-        // `Document.deinit` takes `*Document` so it can poison the handle it
-        // released, so the tree is handed to `deinit` through a mutable one.
+        // Make the parsed document mutable for `deinit`.
         var good = parsed;
         good.deinit();
         return error.BadDocumentParsed;
