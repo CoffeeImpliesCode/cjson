@@ -521,9 +521,7 @@ fn planVariable(
                 const type_last = tree.lastToken(type_node);
                 // `@TypeOf` on an extern constant can emit its address and create a link.
                 // Copy the pointer type to preserve the translated nominal types.
-                decl.field_type = tree.source[
-                    tree.tokenStart(type_first)..tree.tokenStart(type_last) + tree.tokenSlice(type_last).len
-                ];
+                decl.field_type = tree.source[tree.tokenStart(type_first) .. tree.tokenStart(type_last) + tree.tokenSlice(type_last).len];
                 decl.address_value = true;
                 return decl;
             }
@@ -566,9 +564,7 @@ fn dataTypeText(
         );
         return error.UnsupportedDeclaration;
     };
-    const text = tree.source[
-        tree.tokenStart(tree.firstToken(type_node))..tree.tokenStart(last)
-    ];
+    const text = tree.source[tree.tokenStart(tree.firstToken(type_node))..tree.tokenStart(last)];
     if (std.mem.indexOfScalar(u8, text, '=') != null) {
         std.debug.print(
             "runtime/generate.zig: extern '{s}' is initialized; an exported object " ++

@@ -1,8 +1,7 @@
 .{
     .name = .cjson_consumer,
     .version = "0.1.0",
-    // The value Zig 0.16.0 itself printed for this package on the first
-    // observed `zig build run` in this directory:
+    // The fingerprint printed during `zig build run` (observed with Zig 0.16; not rechecked on 0.17):
     //
     //     invalid fingerprint: 0xf6f887a8ffbf16a; if this is a new or forked
     //     package, use this value: 0xf2ef0c9dc8ab4c41

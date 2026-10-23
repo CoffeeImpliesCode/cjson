@@ -184,7 +184,7 @@ test "every number in the grammar fixture parses to the double its own text deno
         const value = element.numberValue() orelse return error.NotANumber;
 
         // Read tokens from the fixture to keep expected values independent.
-        text = text[std.mem.findAny(u8, text, "-0123456789").? ..];
+        text = text[std.mem.findAny(u8, text, "-0123456789").?..];
         var end = text.len;
         for (text, 0..) |byte, at| {
             if (byte == ',' or byte == ']' or byte == '\n') {
