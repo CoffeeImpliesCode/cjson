@@ -451,8 +451,7 @@ test "nesting is accepted below the header's limit and refused above it" {
 
     // cJSON rejects nesting beyond CJSON_NESTING_LIMIT (src/cJSON.h:136-138).
     for ([_]usize{ 32, 64 }) |depth| {
-        const path = try std.fmt.allocPrint(
-            std.testing.allocator,
+        const path = try std.testing.allocator.print(
             "testdata/values/nesting-{d}.json",
             .{depth},
         );

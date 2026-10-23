@@ -13,7 +13,7 @@
     // claiming the same name. Nothing in this package's build graph or program
     // reads it.
     .fingerprint = 0xf2ef0c9dc8ab4c41,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         // A relative path, not a registry or archive URL. The consumer is the
         // proof that `dep.module("cjson")` works from outside the package that

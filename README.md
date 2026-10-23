@@ -1,6 +1,6 @@
 # cJSON
 
-cJSON 1.7.19 is a C JSON parser. This package builds it with Zig 0.16.0 and provides a typed Zig facade.
+cJSON 1.7.19 is a C JSON parser. This package builds it with Zig 0.17.0 and provides a typed Zig facade.
 Upstream: [DaveGamble/cJSON](https://github.com/DaveGamble/cJSON), tag `v1.7.19`.
 
 ## Source deviations

@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const linkage = b.option(
-        std.builtin.LinkMode,
+        std.lang.LinkMode,
         "linkage",
         "Which delivery of libcjson to check. Forwarded to the dependency; it " ++
             "decides the artifact, never anything in this package.",
@@ -49,7 +49,7 @@ pub fn build(b: *std.Build) void {
     const run_exe = b.addRunArtifact(exe);
     run_exe.has_side_effects = true;
     // Forward run arguments so `--provider` reaches `src/main.zig`.
-    if (b.args) |args| run_exe.addArgs(args);
+    run_exe.addPassthruArgs();
     const run_step = b.step("run", "Build and run the consumer program");
     run_step.dependOn(&run_exe.step);
 }

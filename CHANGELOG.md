@@ -1,5 +1,7 @@
 # Changelog
 
+- Port to Zig 0.17.0.
+
 ## 1.7.19
 
 - Added a Zig 0.16.0 package for cJSON 1.7.19 with `libcjson`, the `cjson` module, and static or shared linkage.

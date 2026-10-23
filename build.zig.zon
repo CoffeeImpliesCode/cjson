@@ -6,7 +6,7 @@
     .version = "1.7.19",
     // Fingerprint derivation is recorded in UPSTREAM.md.
     .fingerprint = 0x52f300d9c8f9dfce,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     // All dependencies are vendored; none are fetched.
     .dependencies = .{},
     .paths = .{
