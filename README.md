@@ -33,15 +33,8 @@ Configured build targets:
 
 ### Zig dependency
 
-```zig
-// build.zig.zon
-.dependencies = .{
-    .cjson = .{ .path = "../cjson" },
-},
-
-// build.zig
-const dep = b.dependency("cjson", .{ .target = target, .optimize = optimize });
-exe_mod.addImport("cjson", dep.module("cjson"));
+```sh
+zig fetch --save git+https://github.com/CoffeeImpliesCode/cjson#v1.7.19
 ```
 
 The module and artifact names are both `cjson`. Use `dep.artifact("cjson")` to link the artifact directly. Static builds provide `libcjson.a`; ELF dynamic builds provide `libcjson.so.1.7.19`.
