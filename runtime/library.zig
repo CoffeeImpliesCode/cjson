@@ -108,7 +108,8 @@ pub fn Config(comptime dispatch: type) type {
 
             const number = dst.cJSON_CreateNumber(probe_number) orelse return "cJSON_CreateNumber returned null, so this provider could not " ++
                 "allocate a number node";
-            defer dst.cJSON_Delete(number);
+            var owns_number = true;
+            defer if (owns_number) dst.cJSON_Delete(number);
 
             // Successful insertion transfers node ownership to the object.
             // Release the object, not the inserted node.
@@ -116,6 +117,7 @@ pub fn Config(comptime dispatch: type) type {
                 return "cJSON_AddItemToObject refused an insertion into an empty " ++
                     "object it had just created";
             }
+            owns_number = false;
 
             // Verify exact-name lookup and number bits through the provider.
             const found = dst.cJSON_GetObjectItemCaseSensitive(object, probe_name) orelse return "a member added under its exact name was not found again by " ++
@@ -133,13 +135,14 @@ pub fn Config(comptime dispatch: type) type {
             }
 
             // `cJSON_GetErrorPtr` must point inside this input buffer.
-            if (dst.cJSON_Parse(malformed) != null) {
+            if (dst.cJSON_Parse(malformed)) |unexpected| {
+                dst.cJSON_Delete(unexpected);
                 return "a document that is not JSON parsed successfully, so this " ++
                     "provider is not a cJSON that refuses it";
             }
             const error_ptr = dst.cJSON_GetErrorPtr() orelse return "a failed parse left no error position, so this provider cannot " ++
                 "report where parsing stopped";
-            const first = @intFromPtr(&malformed);
+            const first = @intFromPtr(malformed);
             const at = @intFromPtr(error_ptr);
             if (at < first or at > first + malformed.len) {
                 return "the error position for a failed parse does not lie inside " ++

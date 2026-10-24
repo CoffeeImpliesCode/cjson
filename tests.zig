@@ -67,6 +67,13 @@ fn string(doc: cjson.Borrowed, name: [:0]const u8) ![]const u8 {
     return member.stringValue() orelse return error.NotAString;
 }
 
+test "runtime provider validation completes before publication" {
+    if (comptime !cjson.runtime_loaded) return error.SkipZigTest;
+    nativeReady();
+    try std.testing.expect(cjson.loadedSource() != null);
+    try std.testing.expectEqualStrings("1.7.19", cjson.version());
+}
+
 test "RFC 8259 section 13: the example object keeps every member and value the RFC prints" {
     nativeReady();
     const bytes = try readFixture(std.testing.allocator, "testdata/rfc8259/13-object.json");

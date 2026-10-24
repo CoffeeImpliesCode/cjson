@@ -25,7 +25,9 @@ Configured build targets:
 | `aarch64-macos-none` | Shared builds export more symbols than ELF builds. |
 | `x86_64-windows-gnu` | The header defines DLL exports. |
 | `riscv64-linux-gnu` | |
-| `wasm32-wasi` | Static only; dynamic linkage is refused. |
+| `wasm32-wasi` | Static linked builds only; no runtime provider loading. Dynamic linkage is refused. |
+
+`zig build check` compiles the targets that support the selected linkage and runtime mode. Shared or runtime-loading checks omit WASI.
 
 ## Consumption
 

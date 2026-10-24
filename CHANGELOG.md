@@ -1,5 +1,7 @@
 # Changelog
 
+- Fix runtime-provider parse-error bounds to use the input bytes instead of the pointer binding.
+- Fix runtime-provider probe ownership and omit unsupported targets from shared and runtime-loading checks.
 - Port to Zig 0.17.0.
 
 ## 1.7.19

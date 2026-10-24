@@ -6,7 +6,7 @@
 - `runtime/loader.zig`, `runtime/generate.zig`, `runtime/sync.c`: copied from the workspace runtime core; the SPDX line is MIT for this package's terms.
 - `runtime/sync.h`: copied from the workspace runtime core; the SPDX line is MIT and the include guard is `CJSON_RUNTIME_SYNC_H` for this package.
 - `runtime/graph.zig`: package-specific module wiring, synchronization prefix, and routed-symbol classification.
-- `runtime/library.zig`: package-specific synchronization binding, ABI declaration, and provider checks.
+- `runtime/library.zig`: package-specific synchronization binding, ABI declaration, and provider checks. Probe nodes remain caller-owned until insertion succeeds; object teardown then releases inserted children. Parse-error bounds use the input bytes passed to the provider.
 
 ## Build graph deviations
 
@@ -14,6 +14,7 @@
 - The build uses Zig instead of upstream's CMake or Makefile and needs no configure or download step because the source tree is vendored.
 - The Zig facade uses a translated upstream header. Runtime-loading builds dispatch through an explicitly selected provider and do not link the archive into the module.
 - The build uses upstream's locale and symbol-visibility flags. It adds no linker export list; the header's export macros define the symbols.
+- `check` omits targets without a dynamic loader when shared linkage or runtime loading is selected.
 - There is no system-library mode. `CJSON_NESTING_LIMIT` is a compile-time setting, so an installed header can describe different behavior from its library.
 
 ## Platform boundaries

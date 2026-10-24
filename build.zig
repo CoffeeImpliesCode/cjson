@@ -279,18 +279,10 @@ pub fn addTargetCheck(
     fixtures: *std.Build.Module,
 ) void {
     const target = b.resolveTargetQuery(query);
+    // WASI supports neither shared delivery nor runtime providers.
+    if ((linkage == .dynamic or runtime_loaded) and !targetCarriesSharedObject(target)) return;
     // Target labels keep artifact names unique in one build graph.
     const label = b.fmt("{s}-{s}", .{ @tagName(target.result.cpu.arch), @tagName(target.result.os.tag) });
-
-    if (linkage == .dynamic) {
-        if (sharedObjectRefusal(b, target)) |reason| {
-            parent.dependOn(&b.addFail(b.fmt(
-                "{s}: {s} No artifact was built for this cell.",
-                .{ label, reason },
-            )).step);
-            return;
-        }
-    }
 
     const graph = addGraph(
         b,
@@ -376,7 +368,7 @@ pub fn build(b: *std.Build) void {
 
     const check_step = b.step(
         "check",
-        "Compile the native core, the translated header, the facade, the tests and the example for all six required targets without running them",
+        "Compile the native core, translated header, facade, tests and example for targets supporting the selected linkage and runtime mode",
     );
     if (target_was_named(b)) {
         addTargetCheck(b, check_step, target.query, optimize, linkage, runtime_loaded, fixtures);
