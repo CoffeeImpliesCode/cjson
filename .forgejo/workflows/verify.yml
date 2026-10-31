@@ -268,11 +268,13 @@ jobs:
       # shared object, which is only possible in one job -- and sharing it is
       # what makes the comparison meaningful: a difference between the two
       # artifacts cannot hide.
+      # Zig's Debug C artifacts contain UBSan calls. Link their runtime with
+      # the host compiler instead of disabling the library's safety checks.
       - name: the installed tree serves a C consumer, static
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP"
-          cc -std=c99 -Wall -Wextra -o c_gate_static \
+          cc -std=c99 -Wall -Wextra -fsanitize=undefined -o c_gate_static \
             c_surface_gate.c \
             -I "$GITHUB_WORKSPACE/zig-out/include" \
             "$GITHUB_WORKSPACE/zig-out/lib/libcjson.a" -lm
@@ -289,7 +291,7 @@ jobs:
           zig build -Dlinkage=dynamic -Doptimize=Debug \
             --prefix "$RUNNER_TEMP/prefix-dynamic" \
             --cache-dir "$RUNNER_TEMP/cache-dynamic" --summary all
-          cc -std=c99 -Wall -Wextra -o c_gate_shared \
+          cc -std=c99 -Wall -Wextra -fsanitize=undefined -o c_gate_shared \
             "$RUNNER_TEMP/c_surface_gate.c" \
             -I "$RUNNER_TEMP/prefix-dynamic/include" \
             -L "$RUNNER_TEMP/prefix-dynamic/lib" -lcjson -lm

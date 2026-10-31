@@ -43,6 +43,9 @@ The module and artifact names are both `cjson`. Use `dep.artifact("cjson")` to l
 
 Include `<cjson/cJSON.h>`. The install provides the `cjson.pc` pkg-config file. Shared Windows installs add `-DCJSON_IMPORT_SYMBOLS` to its `Cflags`.
 
+When a host C compiler links a Debug or ReleaseSafe static build, include
+`-fsanitize=undefined` to supply the runtime for Zig's C safety instrumentation.
+
 ## Licence
 
 Copyright (c) 2009-2017 Dave Gamble and cJSON contributors

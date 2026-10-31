@@ -1,5 +1,6 @@
 # Changelog
 
+- Link the host UBSan runtime when CI consumes safety-instrumented Debug C artifacts; keep the library's safety checks enabled.
 - Restore Forgejo verification with Zig 0.17.0, correct installed-header and consumer working directories, and retain the upstream copyright notice in the package README.
 - Report the required symbol missing from a runtime provider and check refusal with a loadable shared object rather than an executable.
 - Fix runtime-provider parse-error bounds to use the input bytes instead of the pointer binding.
