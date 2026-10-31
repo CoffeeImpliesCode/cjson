@@ -17,6 +17,10 @@ The source was obtained from the official GitHub release archive and extracted i
 
 `src/cJSON.c` is the only compiled upstream source. `src/cJSON_Utils.c` and `src/cJSON_Utils.h` are retained but not compiled; upstream builds them as a separate library.
 
+Copyright (c) 2009-2017 Dave Gamble and cJSON contributors
+
+The upstream MIT grant is preserved in `src/LICENSE`.
+
 ## Fixture provenance
 
 | Paths | Origin |

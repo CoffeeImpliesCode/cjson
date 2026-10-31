@@ -290,8 +290,13 @@ pub fn Loader(comptime Config: type) type {
             }
 
             inline for (Config.symbols, 0..) |symbol, index| {
-                const address = platform.lookup(handle, symbol.name) orelse
+                const address = platform.lookup(handle, symbol.name) orelse {
+                    std.debug.print("{s}: missing required symbol: {s}\n", .{
+                        Config.library_name,
+                        symbol.name,
+                    });
                     return error.MissingSymbol;
+                };
                 Config.assign(index, Config.tablePtr(), address);
             }
 

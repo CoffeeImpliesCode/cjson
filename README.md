@@ -42,3 +42,11 @@ The module and artifact names are both `cjson`. Use `dep.artifact("cjson")` to l
 ### C dependency
 
 Include `<cjson/cJSON.h>`. The install provides the `cjson.pc` pkg-config file. Shared Windows installs add `-DCJSON_IMPORT_SYMBOLS` to its `Cflags`.
+
+## Licence
+
+Copyright (c) 2009-2017 Dave Gamble and cJSON contributors
+
+cJSON is distributed under the MIT licence in [`src/LICENSE`](src/LICENSE).
+See [`NOTICE.md`](NOTICE.md) for third-party notices and
+[`FORK-LICENSE.md`](FORK-LICENSE.md) for the fork's licence.

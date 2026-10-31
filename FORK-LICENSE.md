@@ -42,3 +42,10 @@ SOFTWARE.
 `FORK-LICENSE.md` must accompany package copies. The copyright and permission notice above must appear in copies or substantial portions of covered files. `zig build` installs it at `share/licenses/cjson/FORK-LICENSE.md` beside upstream's `LICENSE.cJSON`, so installed copies carry both grants.
 
 For upstream material, its copyright and permission notices must appear in all copies. `src/LICENSE` and `src/cJSON.h` travel with `src/`.
+
+### Upstream cJSON
+
+Copyright (c) 2009-2017 Dave Gamble and cJSON contributors
+
+The upstream MIT permission and warranty text is preserved in
+[`src/LICENSE`](src/LICENSE), installed as `LICENSE.cJSON`.
